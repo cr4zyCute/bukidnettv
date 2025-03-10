@@ -30,8 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  sqflite: ^2.3.0
+  path_provider: ^2.1.2
   video_player: ^2.7.0
-  flutter_vlc_player: ^8.0.0
+  chewie: ^1.7.0
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -39,7 +41,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
+  flutter_native_splash: ^2.3.9
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -61,6 +63,9 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/bukidNet.jpg
+    - assets/outsidetv.png
+    - assets/tubi.png
+    - assets/kloudtv.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -87,3 +92,7 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_native_splash:
+    color: "#ffffff"  # Background color (change to your app's theme)
+    image: /assets/bukidNet.jpg  # Your splash screen logo
+    fullscreen: true  # Removes status bar during splash

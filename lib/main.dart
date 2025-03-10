@@ -1,6 +1,18 @@
 import 'package:flutter/material.dart';
-import '../view/mainScreen.dart'; // Correct import path
+import 'splashscreen.dart'; // Import splash screen
 
 void main() {
-  runApp(BukidNetTVApp()); // Ensure this class is defined in mainScreen.dart
+  runApp(const BukidNetTVApp());
+}
+
+class BukidNetTVApp extends StatelessWidget {
+  const BukidNetTVApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: const SplashScreen(), // Start with Splash Screen
+    );
+  }
 }

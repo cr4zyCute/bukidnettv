@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart';
+import 'package:chewie/chewie.dart';
+import 'package:video_player/video_player.dart';
+import '../model/channels.dart'; // Import the channel model
+import '../model/database_helper.dart';
 
 void main() {
   runApp(const BukidNetTVApp());
@@ -25,48 +28,108 @@ class BukidNetTVScreen extends StatefulWidget {
 }
 
 class _BukidNetTVScreenState extends State<BukidNetTVScreen> {
-  late VlcPlayerController _vlcController;
+  late VideoPlayerController _videoPlayerController;
+  late ChewieController _chewieController;
+
+  int currentIndex = 0; // Track current channel
   bool isFavorite = false;
-  bool isFullscreen = false;
   List<String> favoriteChannels = [];
-  String currentChannel = "Animax";
+  List<Channel> filteredChannels = [];
+  final TextEditingController _searchController = TextEditingController();
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final String streamUrl =
-      "https://livetv-fa.tubi.video/outsidetv2/playlist.m3u8"; // Replace with a valid IPTV URL
 
   @override
   void initState() {
     super.initState();
-    _vlcController = VlcPlayerController.network(
-      streamUrl,
+    _initializePlayer(channels[currentIndex].url);
+    filteredChannels = List.from(channels);
+    _loadFavorites(); // Load favorites when the app starts
+  }
+
+  void _filterChannels(String query) {
+    setState(() {
+      filteredChannels =
+          channels
+              .where(
+                (channel) =>
+                    channel.name.toLowerCase().contains(query.toLowerCase()),
+              )
+              .toList();
+    });
+  }
+
+  void _initializePlayer(String url) {
+    _videoPlayerController = VideoPlayerController.network(url)
+      ..initialize().then((_) {
+        setState(() {});
+        _videoPlayerController.play();
+      });
+
+    _chewieController = ChewieController(
+      videoPlayerController: _videoPlayerController,
       autoPlay: true,
-      options: VlcPlayerOptions(),
+      looping: true,
+      aspectRatio: 16 / 9,
+      showControls: true,
+      customControls: OnlyFullscreenButton(), // Use only fullscreen button
     );
+  }
+
+  void _changeChannel(int index) {
+    setState(() {
+      currentIndex = index;
+      _videoPlayerController.dispose();
+      _chewieController.dispose();
+      _initializePlayer(channels[currentIndex].url);
+
+      // Update isFavorite when switching channels
+      isFavorite = favoriteChannels.contains(channels[currentIndex].name);
+    });
+  }
+
+  void _nextChannel() {
+    if (currentIndex < channels.length - 1) {
+      _changeChannel(currentIndex + 1);
+    }
+  }
+
+  void _previousChannel() {
+    if (currentIndex > 0) {
+      _changeChannel(currentIndex - 1);
+    }
+  }
+
+  void toggleFavorite() async {
+    final db = DatabaseHelper.instance;
+    if (isFavorite) {
+      await db.removeFavorite(channels[currentIndex].name);
+    } else {
+      await db.addFavorite(channels[currentIndex].name);
+    }
+    _loadFavorites(); // Refresh favorites from the database
+  }
+
+  void _loadFavorites() async {
+    final db = DatabaseHelper.instance;
+    List<String> favorites = await db.getFavorites();
+    setState(() {
+      favoriteChannels = favorites;
+      isFavorite = favoriteChannels.contains(channels[currentIndex].name);
+    });
   }
 
   @override
   void dispose() {
-    _vlcController.stop();
-    _vlcController.dispose();
+    _videoPlayerController.dispose();
+    _chewieController.dispose();
     super.dispose();
   }
 
-  void toggleFavorite() {
-    setState(() {
-      isFavorite = !isFavorite;
-      if (isFavorite) {
-        favoriteChannels.add(currentChannel);
-      } else {
-        favoriteChannels.remove(currentChannel);
-      }
-    });
-  }
-
-  void toggleFullscreen() {
-    setState(() {
-      isFullscreen = !isFullscreen;
-    });
+  void _removeFavorite(String channelName) async {
+    final db = DatabaseHelper.instance;
+    await db.removeFavorite(channelName);
+    _loadFavorites(); // Refresh the list after deletion
   }
 
   @override
@@ -76,23 +139,19 @@ class _BukidNetTVScreenState extends State<BukidNetTVScreen> {
 
     return Scaffold(
       key: _scaffoldKey,
-      appBar:
-          isFullscreen
-              ? null
-              : AppBar(
-                backgroundColor: Colors.black,
-                leading: IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.white),
-                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                ),
-                title: const Text(
-                  "BukidNET - Tv",
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        leading: IconButton(
+          icon: const Icon(Icons.menu, color: Colors.white),
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
+        title: const Text(
+          "BukidNET - TV",
+          style: TextStyle(color: Colors.white),
+        ),
+      ),
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
+        child: Column(
           children: [
             DrawerHeader(
               decoration: const BoxDecoration(color: Colors.white),
@@ -102,150 +161,182 @@ class _BukidNetTVScreenState extends State<BukidNetTVScreen> {
                   Image.asset('assets/bukidNet.jpg', height: 80),
                   const SizedBox(height: 20),
                   const Text(
-                    "BukidNET - Tv",
+                    "BukidNET - TV",
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.search),
-              title: const Text("Search Channel"),
-              onTap: () {},
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: "Search Channels...",
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onChanged: (query) {
+                  _filterChannels(query);
+                },
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.tv),
-              title: const Text("Channels"),
-              onTap: () {},
+            const SizedBox(height: 10),
+            const Center(
+              child: Text(
+                "Channels",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: filteredChannels.length,
+                itemBuilder: (context, i) {
+                  return ListTile(
+                    leading: Image.asset(filteredChannels[i].logo, height: 30),
+                    title: Text(filteredChannels[i].name),
+                    onTap: () {
+                      _changeChannel(channels.indexOf(filteredChannels[i]));
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
       ),
+
       backgroundColor: Colors.grey[300],
-      body:
-          isFullscreen
-              ? _buildFullscreenPlayer()
-              : Row(
+      body: Row(
+        children: [
+          if (isLargeScreen)
+            Container(
+              width: screenWidth * 0.20,
+              color: Colors.black,
+              child: Column(
                 children: [
-                  if (isLargeScreen)
-                    Container(
-                      width: screenWidth * 0.20,
-                      color: Colors.black,
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 20),
-                          Image.asset('assets/bukidNet.jpg', height: 100),
-                          const SizedBox(height: 20),
-                          const Text(
-                            "BukidNet - TV",
-                            style: TextStyle(fontSize: 22, color: Colors.white),
-                          ),
-                          const SizedBox(height: 20),
-                          _buildSidebarButton(Icons.tv, "Channels"),
-                          _buildSidebarButton(Icons.favorite, "Favorites"),
-                          _buildSidebarButton(Icons.search, "Search"),
-                        ],
+                  const SizedBox(height: 20),
+                  Image.asset('assets/bukidNet.jpg', height: 100),
+                  const SizedBox(height: 20),
+                  const Text(
+                    "BukidNet - TV",
+                    style: TextStyle(fontSize: 22, color: Colors.white),
+                  ),
+                  const SizedBox(height: 20),
+                  _buildSidebarButton(Icons.tv, "Channels"),
+                  _buildSidebarButton(Icons.favorite, "Favorites"),
+                  _buildSidebarButton(Icons.search, "Search"),
+                ],
+              ),
+            ),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      channels[currentIndex].logo,
+                      height: isLargeScreen ? 80 : 60,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      channels[currentIndex].name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
+                    const SizedBox(height: 10),
+                    AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Chewie(controller: _chewieController),
+                    ),
+                    const SizedBox(height: 10),
+                    IconButton(
+                      icon: Icon(
+                        isFavorite ? Icons.favorite : Icons.favorite_border,
+                        color: Colors.red,
+                      ),
+                      onPressed: toggleFavorite,
+                    ),
+                    const Text("Add to favorites"),
+                    Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Image.asset(
-                              'assets/animax_logo.png',
-                              height: isLargeScreen ? 80 : 60,
+                            ElevatedButton(
+                              onPressed: _previousChannel,
+                              child: const Text("Previous"),
                             ),
-                            const SizedBox(height: 10),
-                            Text(
-                              currentChannel,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            AspectRatio(
-                              aspectRatio: 16 / 9,
-                              child: Stack(
-                                children: [
-                                  VlcPlayer(
-                                    controller: _vlcController,
-                                    aspectRatio: 16 / 9,
-                                    placeholder: const Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: 10,
-                                    right: 10,
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.fullscreen,
-                                        color: Colors.white,
-                                      ),
-                                      onPressed: toggleFullscreen,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            IconButton(
-                              icon: Icon(
-                                isFavorite
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                color: Colors.red,
-                              ),
-                              onPressed: toggleFavorite,
-                            ),
-                            const Text("Add to favorites"),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                ElevatedButton(
-                                  onPressed: () {},
-                                  child: const Text("Previous"),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () {},
-                                  child: const Text("Next"),
-                                ),
-                              ],
+                            ElevatedButton(
+                              onPressed: _nextChannel,
+                              child: const Text("Next"),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-    );
-  }
+                        const SizedBox(height: 10),
+                        const Text(
+                          "Favorite Channels",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Column(
+                          children:
+                              favoriteChannels.map((channelName) {
+                                // Find the channel object using the name
+                                Channel? channel = channels.firstWhere(
+                                  (ch) => ch.name == channelName,
+                                  orElse:
+                                      () => Channel(
+                                        name: channelName,
+                                        url: "",
+                                        logo: "assets/default_logo.png",
+                                      ), // Default image if not found
+                                );
 
-  Widget _buildFullscreenPlayer() {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Center(
-            child: VlcPlayer(
-              controller: _vlcController,
-              aspectRatio: 16 / 9,
-              placeholder: const Center(child: CircularProgressIndicator()),
-            ),
-          ),
-          Positioned(
-            top: 30,
-            left: 10,
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: toggleFullscreen,
+                                return ListTile(
+                                  leading: Image.asset(
+                                    channel.logo,
+                                    height: 30,
+                                    width: 30,
+                                    fit: BoxFit.cover,
+                                  ),
+                                  title: Text(channel.name),
+                                  trailing: IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () {
+                                      _removeFavorite(channel.name);
+                                    },
+                                  ),
+                                  onTap: () {
+                                    int index = channels.indexWhere(
+                                      (ch) => ch.name == channel.name,
+                                    );
+                                    if (index != -1) {
+                                      _changeChannel(index);
+                                    }
+                                  },
+                                );
+                              }).toList(),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -258,6 +349,23 @@ class _BukidNetTVScreenState extends State<BukidNetTVScreen> {
       leading: Icon(icon, color: Colors.white),
       title: Text(title, style: const TextStyle(color: Colors.white)),
       onTap: () {},
+    );
+  }
+}
+
+class OnlyFullscreenButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final chewieController = ChewieController.of(context);
+
+    return Align(
+      alignment: Alignment.bottomRight,
+      child: IconButton(
+        icon: const Icon(Icons.fullscreen, color: Colors.white, size: 30),
+        onPressed: () {
+          chewieController.enterFullScreen();
+        },
+      ),
     );
   }
 }
